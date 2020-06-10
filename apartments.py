@@ -12,6 +12,7 @@ import sys
 import argparse
 from time import sleep
 import re
+from datetime import datetime
 from random import randint
 from warnings import warn
 from time import time
@@ -34,7 +35,15 @@ pl.style.use("default")
 # pl.rcParams.update(params)
 
 
-currency = {"tokyo": "¥", "seoul": "₩", "manila": "₱", "sfbay": "$"}
+currency = {
+    "tokyo": "¥",  # "",
+    "seoul": "₩",  # "",
+    "singapore": "$",
+    "sfbay": "$",  # "",
+    "manila": "₱",  # "",
+    "delhi": "₨",
+    "vietnam": "₫",
+}
 
 
 class Base:
@@ -48,10 +57,11 @@ class Base:
         save_csv=False,
         save_fig=False,
     ):
-        self.location = location
+        self.location = location.lower()
         self.currency_mark = currency[self.location]
         self.max_price = max_price
         self.max_sqft = max_sqft
+        self.unit = "ft^2" if "self.location" == "sfbay" else "meter^2"
         self.npages = npages
         self.verbose = verbose
         self.save_csv = save_csv
@@ -64,13 +74,16 @@ class Base:
         self.post_links = []
         self.post_prices = []
         # methods
+        self.base_url = (
+            f"https://{self.location}.craigslist.org/search/apa/apt?"
+        )
         self.scrape_craiglist()
         self.apts = self.make_df()
 
     def get_pages(self):
         # get the first page of housing prices
         response = response = requests.get(
-            f"https://{self.location}.craigslist.org/search/apa/apt?"
+            self.base_url
             + "&hasPic=1"
             + "&availabilityMode=0"
             + "&sale_date=all+dates"
@@ -98,7 +111,7 @@ class Base:
             pages = np.arange(1, self.npages + 1)
         if self.verbose:
             print(
-                f"Scraping {len(pages)} out of {len(self.get_pages())} pages."
+                f"Scraping {len(pages)} out of {len(self.get_pages())} pages from {self.base_url}."
             )
 
         for page in tqdm(pages):
@@ -161,7 +174,6 @@ class Base:
                     self.post_prices.append(post_price)
 
                     if post.find("span", class_="housing") is not None:
-
                         # if the first element is accidentally square footage
                         if (
                             "ft2"
@@ -225,31 +237,16 @@ class Base:
                             self.bedroom_counts.append(bedroom_count)
 
                             # and sqft will be number 3, so set these here and append
-                            sqft = np.nan
-                            self.sqfts.append(sqft)
+                            self.sqfts.append(np.nan)
 
                         else:
-                            bedroom_count = np.nan
-                            self.bedroom_counts.append(bedroom_count)
-
-                            sqft = np.nan
-                            self.sqfts.append(sqft)
+                            self.bedroom_counts.append(np.nan)
+                            self.sqfts.append(np.nan)
 
                     # if none of those conditions catch, make bedroom nan, this won't be needed
                     else:
-                        bedroom_count = np.nan
-                        self.bedroom_counts.append(bedroom_count)
-
-                        sqft = np.nan
-                        self.sqfts.append(sqft)
-                    #    bedroom_counts.append(bedroom_count)
-
-                    #    sqft = np.nan
-                    #    sqfts.append(sqft)
-                # except Exception as e:
-                #     print(e)
-            # print("Page " + str(iterations+1) + " scraped successfully.")
-
+                        self.bedroom_counts.append(np.nan)
+                        self.sqfts.append(np.nan)
         print("\n")
 
     def make_df(self):
@@ -268,10 +265,17 @@ class Base:
             df["number bedrooms"], errors="coerce"
         )
         df["sqft"] = pd.to_numeric(df["sqft"], errors="coerce")
+        # remove duplicates (spam)
+        df = df.drop_duplicates(subset="URL")
         if self.save_csv:
             fp = f"{self.location}_apartments.csv"
             df.to_csv(fp, index=False)
-        return df
+        idx = (df.price < self.max_price) & (df.sqft < self.max_sqft)
+        if self.verbose:
+            print(
+                f"{len(~idx)} properties are removed using price<{self.currency_mark}{self.max_price} & area<{self.max_sqft} {self.unit}."
+            )
+        return df[idx]
 
     def plot_price(self, ax=None):
         apts = self.apts.copy()
@@ -280,23 +284,20 @@ class Base:
             fig, ax = pl.subplots(
                 1, 1, figsize=(12, 8), constrained_layout=True
             )
-
         sb.scatterplot(
             x="price",
             y="sqft",
             hue="number bedrooms",
-            palette="viridis",
+            palette="Set1",
             x_jitter=True,
             y_jitter=True,
             s=125,
-            data=apts[
-                (apts.price < self.max_price) & (apts.sqft < self.max_sqft)
-            ],
+            data=apts,
             ax=ax,
         )
         ax.set_xlabel(f"Price ({self.currency_mark})")
-        ax.set_ylabel("Area (sqft)")
-        ax.set_title(f"Apartments in {self.location}")
+        ax.set_ylabel(f"Area ({self.unit})")
+        ax.set_title(f"Apartments in {self.location.title()}")
         if self.save_fig:
             fp = f"{self.location}_apartments_price.png"
             fig.savefig(fp)
@@ -309,93 +310,121 @@ class Base:
             fig, ax = pl.subplots(
                 1, 1, figsize=(12, 8), constrained_layout=True
             )
-        sb.regplot(
-            x="price",
-            y="sqft",
-            data=apts[
-                (apts.price < self.max_price) & (apts.sqft < self.max_sqft)
-            ],
-            ax=ax,
-        )
+        sb.regplot(x="price", y="sqft", data=apts, ax=ax)
         ax.set_xlabel(f"Price ({self.currency_mark})")
-        ax.set_ylabel("Area (sqft)")
-        ax.set_title(f"Apartments in {self.location}")
+        ax.set_ylabel(f"Area ({self.unit})")
+        ax.set_title(f"Apartments in {self.location.title()}")
         if self.save_fig:
             fp = f"{self.location}_apartments_regression.png"
             fig.savefig(fp)
         return ax
 
-    def plot_boxplot(self, ax=None):
+    def get_clean_df(self):
         apts = self.apts.copy()
         assert apts is not None, "Empty data!"
-        if ax is None:
-            fig, ax = pl.subplots(
-                1, 1, figsize=(12, 8), constrained_layout=True
-            )
-        #
-        apts.neighborhood = apts.neighborhood.apply(lambda x: x.lower())
-        # remove parentheses, site/ location, numbers
+        n_before = apts.shape[0]
+        if self.verbose:
+            print(f"Number of properties: {n_before}")
+        apts.neighborhood = apts.neighborhood.apply(lambda x: x.title())
+        # remove parentheses
         apts.neighborhood = apts.neighborhood.apply(
             lambda x: x.replace("(", "")
         )
         apts.neighborhood = apts.neighborhood.apply(
             lambda x: x.replace(")", "")
         )
+        # # remove /
         apts.neighborhood = apts.neighborhood.apply(
-            lambda x: x.replace(f", {self.location}", "")
+            lambda x: x.split("/")[1] if len(x.split("/")) > 1 else x
         )
+        # remove location, city name
         apts.neighborhood = apts.neighborhood.apply(
-            lambda x: x.replace(f" and ", "&")
+            lambda x: x.replace(f", {self.location.title()}", "")
         )
+        # apts.neighborhood = apts.neighborhood.apply(
+        #     lambda x: x.replace(f" and ", "&")
+        # )
+        # # remove numbers
         apts.neighborhood = apts.neighborhood.apply(
             lambda x: "".join([i for i in x if not i.isdigit()])
         )
         apts.neighborhood = apts.neighborhood.apply(
-            lambda x: x.replace(f" line", "")
+            lambda x: x.replace(f" Line", "")
         )
         apts.neighborhood = apts.neighborhood.apply(
-            lambda x: x.replace(f" station", "")
+            lambda x: x.replace(f" Station", "")
         )
+        # remove word city
+        apts.neighborhood = apts.neighborhood.apply(
+            lambda x: x.replace(f" City", "")
+        )
+        # # remove whitespaces
+        apts.neighborhood = apts.neighborhood.map(
+            lambda x: x.lstrip().rstrip()
+        )
+        # apts.neighborhood = apts.neighborhood.apply(lambda x: x.replace(' ', ''))
+        # city-specific parsers
         if self.location == "seoul":
             apts.neighborhood = apts.neighborhood.apply(
-                lambda x: x.replace(f" stn", "")
+                lambda x: x.replace(f" Stn", "")
             )
             apts.neighborhood = apts.neighborhood.apply(
-                lambda x: x.replace(f" subway", "")
+                lambda x: x.replace(f" Subway", "")
             )
         if self.location == "tokyo":
             apts.neighborhood = apts.neighborhood.apply(
-                lambda x: x.replace(f" city", "")
+                lambda x: x.replace(f"-Ku", "")
             )
             apts.neighborhood = apts.neighborhood.apply(
-                lambda x: x.replace(f"-ku", "")
+                lambda x: x.replace(f"-Shi", "")
             )
-        min_count = 2 if self.npages == 1 else 5
-        # apts2 = apts.groupby(by='neighborhood').filter(lambda x, min_count=min_count: len(x) >= min_count if len(str(x).split())<3 else False)
+        removed = n_before - apts.shape[0]
+        if self.verbose & (removed > 0):
+            print(f"Number of properties removed: {removed}")
+
+        apts.posted = pd.to_datetime(apts.posted)
+        return apts
+
+    def plot_boxplot(self, ax=None):
+        if ax is None:
+            fig, ax = pl.subplots(
+                1, 1, figsize=(12, 8), constrained_layout=True
+            )
+        apts = self.get_clean_df()
+        min_count = 3 if self.npages <= 3 else 5
         apts2 = apts.groupby(by="neighborhood").filter(
             lambda x, min_count=min_count: len(x) >= min_count
         )
-        sb.boxplot(
-            x="neighborhood",
-            y="price",
-            data=apts2[
-                (apts2.price < self.max_price) & (apts2.sqft < self.max_sqft)
-            ],
-        )
-        pl.xticks(rotation=75)
-        ax.set_ylabel(f"Price ({self.currency_mark})")
-        ax.set_xlabel("Neighborhood")
-        ax.set_title(f"Apartments in {self.location}")
-        if self.save_fig:
-            fp = f"{self.location}_apartments_boxplot.png"
-            fig.savefig(fp)
-        return ax
+        assert len(apts2) > 0, "Not enough data for boxplot. Try -p"
+        if self.verbose:
+            print(
+                f"Number of properties removed: {apts.shape[0]-apts2.shape[0]}"
+            )
+        try:
+            sb.boxplot(
+                x="neighborhood",
+                y="price",
+                data=apts2[
+                    (apts2.price < self.max_price)
+                    & (apts2.sqft < self.max_sqft)
+                ],
+            )
+            pl.xticks(rotation=75)
+            ax.set_ylabel(f"Price ({self.currency_mark})")
+            ax.set_xlabel("Neighborhood")
+            ax.set_title(f"Apartments in {self.location.title()}")
+            if self.save_fig:
+                fp = f"{self.location}_apartments_boxplot.png"
+                fig.savefig(fp)
+            return ax
+        except Exception:
+            raise ValueError("Not enough data for boxplot. Try -p")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="check craigslist apartments")
     parser.add_argument("-l", "--location", type=str, default="tokyo")  # site
-    parser.add_argument("--max_price", type=float, default=100000)
+    parser.add_argument("--max_price", type=float, default=300000)
     parser.add_argument("--max_sqft", type=float, default=100)
     parser.add_argument("-n", "--npages", type=int, default=None)
     parser.add_argument(
