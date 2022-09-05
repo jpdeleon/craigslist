@@ -32,7 +32,7 @@ from craigslist import (
 # pd.set_option('display.max_colwidth', 100)
 # pd.set_option('display.max_columns', None)
 # pd.set_option('display.width', None)
-pd.set_option("display.max_colwidth", None)
+pd.set_option("display.max_colwidth", 999)
 
 # def make_clickable(val):
 #    return f'<a href="{val}">{val}</a>'
@@ -144,7 +144,7 @@ if __name__ == "__main__":
     # print(df.style.format({'url': make_clickable}))
     if args.n is None:
         # pd.set_option('display.max_rows', df.head(args.n))
-        pd.set_option("display.max_rows", None)
+        pd.set_option("display.max_rows", 999)
     # df.style.set_properties(subset=['url'], **{'width': '500px'})
     print(df)
     if args.save:

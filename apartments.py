@@ -168,9 +168,14 @@ class Base:
                     self.post_links.append(post_link)
 
                     # removes the \n whitespace from each side, removes the currency symbol, and turns it into an int
-                    post_price = int(
-                        post.a.text.strip().replace(self.currency_mark, "")
-                    )
+                    try:
+                        post_price = int(
+                            post.a.text.strip().replace(",", "").replace(self.currency_mark, "")
+                        )
+                    except Exception as e:
+                        print("Error: ", e)
+                        post_price = 0
+                    print("Formatted: {0} --> {1}".format(post.a.text.rstrip('\n'), post_price))
                     self.post_prices.append(post_price)
 
                     if post.find("span", class_="housing") is not None:
@@ -270,12 +275,15 @@ class Base:
         if self.save_csv:
             fp = f"{self.location}_apartments.csv"
             df.to_csv(fp, index=False)
-        idx = (df.price < self.max_price) & (df.sqft < self.max_sqft)
-        if self.verbose:
-            print(
-                f"{len(~idx)} properties are removed using price<{self.currency_mark}{self.max_price} & area<{self.max_sqft} {self.unit}."
-            )
-        return df[idx]
+        idx = (df.price < self.max_price) #& (df.sqft < self.max_sqft)
+        if len(df[idx])==0:
+            return df
+        else:
+            if self.verbose:
+                print(
+                    f"{len(~idx)} properties are removed using price<{self.currency_mark}{self.max_price} & area<{self.max_sqft} {self.unit}."
+                )
+            return df[idx]
 
     def plot_price(self, ax=None):
         apts = self.apts.copy()
@@ -392,6 +400,7 @@ class Base:
             )
         apts = self.get_clean_df()
         min_count = 3 if self.npages <= 3 else 5
+        #apts2 = apts[apts.price>0]
         apts2 = apts.groupby(by="neighborhood").filter(
             lambda x, min_count=min_count: len(x) >= min_count
         )
@@ -404,10 +413,7 @@ class Base:
             sb.boxplot(
                 x="neighborhood",
                 y="price",
-                data=apts2[
-                    (apts2.price < self.max_price)
-                    & (apts2.sqft < self.max_sqft)
-                ],
+                data=apts2
             )
             pl.xticks(rotation=75)
             ax.set_ylabel(f"Price ({self.currency_mark})")
