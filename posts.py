@@ -14,10 +14,11 @@ CraigslistEvents (craigslist.org > event calendar)
 CraigslistServices (craigslist.org > services)
 CraigslistGigs (craigslist.org > gigs)
 CraigslistResumes (craigslist.org > resumes)
-"""
-import sys
 
+See more https://pypi.org/project/python-craigslist/
+"""
 # import time
+import sys
 import argparse
 import pandas as pd
 from datetime import datetime
@@ -27,6 +28,7 @@ from craigslist import (
     CraigslistCommunity,
     CraigslistServices,
     CraigslistEvents,
+    CraigslistForSale
 )
 
 # pd.set_option('display.max_colwidth', 100)
@@ -65,6 +67,7 @@ words_to_omit = [
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="check craigslist")
     parser.add_argument("-l", "--location", type=str, default="tokyo")  # site
+    parser.add_argument("-f", "--forsale", action="store_true", default=False)
     parser.add_argument("-g", "--gigs", action="store_true", default=False)
     parser.add_argument("-j", "--jobs", action="store_true", default=False)
     parser.add_argument(
@@ -97,6 +100,12 @@ if __name__ == "__main__":
         )
         info = CraigslistGigs(site=location)
         drop_columns.append("is_paid")
+    elif args.forsale:
+        msg = (
+            f"Querying for sale items from https://{location}.craigslist.org/search/zip?lang=en&cc=us?"
+        )
+        info = CraigslistForSale(site=location)
+        #drop_columns.append("is_paid")
     elif args.jobs:
         msg = (
             f"Querying jobs from https://{location}.craigslist.org/search/jjj?"
@@ -150,11 +159,13 @@ if __name__ == "__main__":
     # df.style.set_properties(subset=['url'], **{'width': '500px'})
     if args.keywords is not None:
         #import pdb; pdb.set_trace()
+        if args.verbose:
+            print(f"Querying: {args.keywords}")
         idx = df.name.str.contains('|'.join(args.keywords), case=False)
     if len(df[idx])>0:
         df = df[idx]
     else:
-        print(f"{args.keywords} not found from the following:")
+        sys.exit(f"{args.keywords} not found!")
     print(df)
     if args.save:
         # add date

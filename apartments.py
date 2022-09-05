@@ -175,7 +175,8 @@ class Base:
                     except Exception as e:
                         print("Error: ", e)
                         post_price = 0
-                    print("Formatted: {0} --> {1}".format(post.a.text.rstrip('\n'), post_price))
+                    if self.verbose:
+                        print("Formatted: {0} --> {1}".format(post.a.text.rstrip('\n'), post_price))
                     self.post_prices.append(post_price)
 
                     if post.find("span", class_="housing") is not None:
