@@ -39,6 +39,7 @@ pd.set_option("display.max_colwidth", 999)
 
 # thirty_days_old = datetime.now()
 words_to_omit = [
+    "AV",
     "model",
     "masseuse",
     "massage",
@@ -75,6 +76,7 @@ if __name__ == "__main__":
     parser.add_argument("--save", action="store_true", default=False)
     parser.add_argument("-a", "--area", type=str, default=None)  # site
     # parser.add_argument("-d", type=str, default=thirty_days_old)
+    parser.add_argument("-k", "--keywords", nargs='+', type=str, default=None)
     parser.add_argument("-n", type=int, default=None)
     args = parser.parse_args(None if sys.argv[1:] else ["-h"])
 
@@ -138,7 +140,7 @@ if __name__ == "__main__":
     # replace capital letters
     d = df.name.apply(lambda x: x.lower())
     # remove words
-    idx = d.str.contains("|".join(words_to_omit))
+    idx = d.str.contains("|".join(words_to_omit), case=False)
     df = df[~idx].reset_index(drop=True)
     assert len(df) > 0, "No data."
     # print(df.style.format({'url': make_clickable}))
@@ -146,6 +148,13 @@ if __name__ == "__main__":
         # pd.set_option('display.max_rows', df.head(args.n))
         pd.set_option("display.max_rows", 999)
     # df.style.set_properties(subset=['url'], **{'width': '500px'})
+    if args.keywords is not None:
+        #import pdb; pdb.set_trace()
+        idx = df.name.str.contains('|'.join(args.keywords), case=False)
+    if len(df[idx])>0:
+        df = df[idx]
+    else:
+        print(f"{args.keywords} not found from the following:")
     print(df)
     if args.save:
         # add date
